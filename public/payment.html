@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flight Booking Payment</title>
+    <script src="https://js.stripe.com/v3/"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .payment-container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .payment-form {
+            margin-top: 20px;
+        }
+        #payment-element {
+            margin: 20px 0;
+        }
+        #submit {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 16px;
+        }
+        #submit:hover {
+            background: #0056b3;
+        }
+        #submit:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .error {
+            color: #dc3545;
+            margin-top: 10px;
+        }
+        .success {
+            color: #28a745;
+            margin-top: 10px;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="payment-container">
+        <h2>Complete Your Flight Booking Payment</h2>
+        <div id="booking-details"></div>
+        
+        <form id="payment-form" class="payment-form">
+            <div id="payment-element">
+                <!-- Stripe Elements will create form elements here -->
+            </div>
+            <button id="submit" type="submit">
+                <div class="spinner hidden" id="spinner"></div>
+                <span id="button-text">Pay Now</span>
+            </button>
+            <div id="payment-message" class="hidden"></div>
+        </form>
+
+        <div id="loading" class="loading">
+            <p>Processing payment...</p>
+        </div>
+    </div>
+
+    <script>
+        // Get Stripe publishable key from environment or use default
+        const stripePublishableKey = 'pk_test_51234567890abcdef'; // Replace with your actual key
+
+        // Initialize Stripe
+        const stripe = Stripe(stripePublishableKey);
+
+        // Get client secret from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const clientSecret = urlParams.get('payment_intent_client_secret');
+        const returnUrl = urlParams.get('return_url') || window.location.origin;
+
+        if (!clientSecret) {
+            document.getElementById('payment-message').innerHTML = 
+                '<div class="error">Invalid payment link. Please try again.</div>';
+            document.getElementById('payment-form').style.display = 'none';
+        } else {
+            // Initialize Stripe Elements
+            const elements = stripe.elements({
+                clientSecret: clientSecret
+            });
+
+            const paymentElement = elements.create('payment');
+            paymentElement.mount('#payment-element');
+
+            // Handle form submission
+            const form = document.getElementById('payment-form');
+            form.addEventListener('submit', async (event) => {
+                event.preventDefault();
+
+                const { error } = await stripe.confirmPayment({
+                    elements,
+                    confirmParams: {
+                        return_url: returnUrl
+                    }
+                });
+
+                if (error) {
+                    const messageContainer = document.getElementById('payment-message');
+                    messageContainer.innerHTML = `<div class="error">${error.message}</div>`;
+                } else {
+                    // Payment succeeded
+                    document.getElementById('loading').style.display = 'block';
+                    document.getElementById('payment-form').style.display = 'none';
+                }
+            });
+        }
+
+        // Handle return from payment
+        if (window.location.search.includes('payment_intent')) {
+            stripe.retrievePaymentIntent(clientSecret).then(({ paymentIntent }) => {
+                const messageContainer = document.getElementById('payment-message');
+                
+                switch (paymentIntent.status) {
+                    case 'succeeded':
+                        messageContainer.innerHTML = '<div class="success">Payment succeeded! Your flight is booked.</div>';
+                        break;
+                    case 'processing':
+                        messageContainer.innerHTML = '<div>Your payment is processing.</div>';
+                        break;
+                    case 'requires_payment_method':
+                        messageContainer.innerHTML = '<div class="error">Your payment was not successful, please try again.</div>';
+                        break;
+                    default:
+                        messageContainer.innerHTML = '<div class="error">Something went wrong.</div>';
+                        break;
+                }
+            });
+        }
+    </script>
+</body>
+</html>
